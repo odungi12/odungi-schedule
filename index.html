@@ -33,9 +33,15 @@ body {
   font-size: 14px;
   padding-bottom: env(safe-area-inset-bottom);
 }
-.app { display: flex; gap: 16px; padding: 16px; align-items: flex-start; max-width: 1300px; margin: 0 auto; flex-wrap: wrap; }
-.col-left { width: 450px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; }
-.col-right { flex: 1; min-width: 280px; }
+.app {
+  display: grid; gap: 16px; padding: 16px; max-width: 1300px; margin: 0 auto;
+  grid-template-columns: 450px 1fr;
+  grid-template-areas: "title right" "list right";
+  align-items: start;
+}
+#titleCard { grid-area: title; }
+.col-left-list { grid-area: list; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.col-right { grid-area: right; min-width: 0; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
 h1 { font-size: 19px; margin: 0 0 2px 0; }
 .subtitle { color: var(--sub); font-size: 12px; margin: 0 0 14px 0; }
@@ -120,11 +126,11 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
 #gsiBtn { display: flex; justify-content: center; }
 .topbar { display: flex; justify-content: flex-end; padding: 8px 16px 0; max-width: 1100px; margin: 0 auto; }
 @media (max-width: 700px) {
-  .app { flex-direction: column; padding: 10px; }
-  .col-left { width: 100%; display: contents; }
-  .col-right { width: 100%; min-width: 0; order: 2; }
-  #titleCard { order: 1; width: 100%; }
-  .col-left .card:not(#titleCard) { order: 3; width: 100%; }
+  .app {
+    padding: 10px;
+    grid-template-columns: 1fr;
+    grid-template-areas: "title" "right" "list";
+  }
   .cal-cell { height: 62px; }
 }
 </style>
@@ -144,16 +150,17 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
     <button class="btn secondary small" id="btnSignOut">로그아웃</button>
   </div>
   <div class="app">
-    <div class="col-left">
-      <div class="card" id="titleCard">
-        <h1 style="display:flex;align-items:center;gap:12px;margin-bottom:10px;"><img src="icon-192.png" alt="" style="width:78px;height:78px;border-radius:20px;box-shadow:0 3px 10px rgba(0,0,0,0.12);flex-shrink:0;">오둥이 일정</h1>
-        <p class="subtitle">사랑하는 오둥이의 소중한 일정표</p>
-        <div class="top-actions">
-          <button class="btn" id="btnAdd" style="flex:1">+ 일정 추가</button>
-          <button class="btn secondary" id="btnRefresh">새로고침</button>
-        </div>
-        <div class="legend" id="legend"></div>
+    <div class="card" id="titleCard">
+      <h1 style="display:flex;align-items:center;gap:12px;margin-bottom:10px;"><img src="icon-192.png" alt="" style="width:78px;height:78px;border-radius:20px;box-shadow:0 3px 10px rgba(0,0,0,0.12);flex-shrink:0;">오둥이 일정</h1>
+      <p class="subtitle">사랑하는 오둥이의 소중한 일정표</p>
+      <div class="top-actions">
+        <button class="btn" id="btnAdd" style="flex:1">+ 일정 추가</button>
+        <button class="btn secondary" id="btnRefresh">새로고침</button>
       </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="col-left-list">
       <div class="card">
         <h2>다가오는 일정 (D-day)</h2>
         <div class="dday-list" id="ddayList"><div class="empty">불러오는 중...</div></div>
