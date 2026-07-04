@@ -33,8 +33,8 @@ body {
   font-size: 14px;
   padding-bottom: env(safe-area-inset-bottom);
 }
-.app { display: flex; gap: 16px; padding: 16px; align-items: flex-start; max-width: 1100px; margin: 0 auto; flex-wrap: wrap; }
-.col-left { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; }
+.app { display: flex; gap: 16px; padding: 16px; align-items: flex-start; max-width: 1300px; margin: 0 auto; flex-wrap: wrap; }
+.col-left { width: 450px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; }
 .col-right { flex: 1; min-width: 280px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
 h1 { font-size: 19px; margin: 0 0 2px 0; }
@@ -59,8 +59,8 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
 .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .cal-title { font-size: 16px; font-weight: 700; text-align: center; margin-bottom: 8px; }
 .cal-nav { display: flex; gap: 6px; }
-.cal-months { display: flex; gap: 18px; flex-wrap: wrap; }
-.cal-month-block { flex: 1; min-width: 260px; }
+.cal-months { display: flex; flex-direction: column; gap: 22px; }
+.cal-month-block { width: 100%; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .cal-dow-row { display: grid; grid-template-columns: repeat(7,1fr); }
 .cal-dow { text-align: center; font-size: 11px; color: var(--sub); padding-bottom: 4px; font-weight: 600; }
@@ -122,8 +122,6 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
 @media (max-width: 700px) {
   .app { flex-direction: column; }
   .col-left { width: 100%; }
-  .cal-months { flex-direction: column; }
-  .cal-month-block { min-width: 0; }
 }
 </style>
 </head>
@@ -157,10 +155,7 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
         <div class="dday-list" id="ddayList"><div class="empty">불러오는 중...</div></div>
       </div>
       <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <h2 style="margin:0;">중요일정 · 이벤트 (D-day)</h2>
-          <button class="btn small" id="btnAddImportant">+ 추가</button>
-        </div>
+        <h2>중요일정 · 이벤트 (D-day)</h2>
         <div class="dday-list" id="ddayList2"><div class="empty">불러오는 중...</div></div>
       </div>
     </div>
@@ -298,6 +293,7 @@ const CATEGORIES = {
   '중요일정':   { color: '#9b6bd6', colorId: '3',  emoji: '⭐' },
   '이벤트':     { color: '#4caf50', colorId: '10', emoji: '🎊' },
   '업무일정':   { color: '#5484ed', colorId: '9',  emoji: '💼' },
+  '기타':       { color: '#9aa0a6', colorId: '8',  emoji: '📌' },
 };
 // 매년 반복(양력/음력) 등록이 허용되는 카테고리
 const REPEATABLE_CATEGORIES = new Set(['가족생일', '기념일', '친구생일']);
@@ -453,7 +449,8 @@ async function fetchAllEvents() {
       const dateStr = dateRaw.slice(0, 10);
       const tag = parseTag(ev.description || '');
       let rawCategory = tag ? (CATEGORY_ALIASES[tag.category] || tag.category) : null;
-      const category = rawCategory && CATEGORIES[rawCategory] ? rawCategory : '이벤트';
+      // 오둥이 태그가 없는 외부/기존 캘린더 일정은 "기타"로 분류 (중요일정·이벤트 목록에 섞이지 않도록)
+      const category = rawCategory && CATEGORIES[rawCategory] ? rawCategory : '기타';
       return {
         id: ev.id,
         title: ev.summary || '(제목 없음)',
@@ -546,7 +543,7 @@ function renderDdayList(elId, categoryFilter) {
       <span class="dday-badge" style="background:${cat.color}">${diff === 0 ? 'D-DAY' : 'D-' + diff}</span>
       <span class="dday-title">${cat.emoji} ${escapeHtml(ev.title)}</span>
       <span class="dday-date">${ev.dateStr.slice(5)}</span>
-      <button class="btn danger small" data-id="${ev.id}" data-series="${ev.series||''}">삭제</button>`;
+      <button class="btn danger small" data-id="${ev.id}" data-series="${ev.series||''}">종료</button>`;
     row.querySelector('button[data-id]').addEventListener('click', () => onDeleteEvent(ev.id, ev.series));
     el.appendChild(row);
   });
@@ -649,7 +646,7 @@ function renderDayPanel() {
           <div class="title">${escapeHtml(ev.title)}</div>
           <div class="cat-tag">${cat.emoji} ${ev.category}${ev.isLunar ? ' · 음력 자동변환' : ''}</div>
         </div>
-        <button class="btn danger small" data-id="${ev.id}" data-series="${ev.series||''}">삭제</button>
+        <button class="btn danger small" data-id="${ev.id}" data-series="${ev.series||''}">종료</button>
       </div>`;
     });
   }
@@ -662,7 +659,7 @@ function renderDayPanel() {
 async function onDeleteEvent(eventId, seriesId) {
   let idsToDelete = [eventId];
   if (seriesId) {
-    const ok = confirm('이 일정은 매년 반복되는 음력 일정이에요. 앞으로 생성된 모든 회차를 함께 삭제할까요?\n(취소를 누르면 이 날짜만 삭제됩니다)');
+    const ok = confirm('이 일정은 매년 반복되는 음력 일정이에요. 앞으로 생성된 모든 회차를 함께 종료할까요?\n(취소를 누르면 이 날짜만 종료됩니다)');
     if (ok) idsToDelete = allEvents.filter(ev => ev.series === seriesId).map(ev => ev.id);
   }
   showLoading(true);
@@ -732,11 +729,6 @@ document.querySelectorAll('input[name=fRepeat]').forEach(r => r.addEventListener
 
 document.getElementById('btnAdd').addEventListener('click', () => {
   populateForm();
-  document.getElementById('formStatus').textContent = '';
-  document.getElementById('modalBackdrop').classList.add('open');
-});
-document.getElementById('btnAddImportant').addEventListener('click', () => {
-  populateForm(['중요일정', '이벤트']);
   document.getElementById('formStatus').textContent = '';
   document.getElementById('modalBackdrop').classList.add('open');
 });
