@@ -555,7 +555,7 @@ function renderDdayList(elId, categoryFilter) {
     row.className = 'dday-item';
     row.innerHTML = `
       <span class="dday-badge" style="background:${cat.color}">${diff === 0 ? 'D-DAY' : 'D-' + diff}</span>
-      <span class="dday-title">${cat.emoji} ${escapeHtml(ev.title)}${ev.note ? ` <span style="font-size:0.5em;color:var(--sub);">${escapeHtml(ev.note)}</span>` : ''}</span>
+      <span class="dday-title">${cat.emoji} ${escapeHtml(ev.title)}${ev.note ? ` <span style="color:var(--sub);">${escapeHtml(ev.note)}</span>` : ''}</span>
       <span class="dday-date">${ev.dateStr.slice(5)}</span>
       <button class="btn danger small" data-id="${ev.id}" data-series="${ev.series||''}">종료</button>`;
     row.querySelector('button[data-id]').addEventListener('click', () => onDeleteEvent(ev.id, ev.series));
@@ -592,7 +592,7 @@ function renderElapsedList() {
     row.className = 'dday-item';
     row.innerHTML = `
       <span class="dday-badge" style="background:${cat.color}">D+${diff}</span>
-      <span class="dday-title">${cat.emoji} ${escapeHtml(ev.title)}${ev.note ? ` <span style="font-size:0.5em;color:var(--sub);">${escapeHtml(ev.note)}</span>` : ''}</span>
+      <span class="dday-title">${cat.emoji} ${escapeHtml(ev.title)}${ev.note ? ` <span style="color:var(--sub);">${escapeHtml(ev.note)}</span>` : ''}</span>
       <span class="dday-date">${ev.dateStr.slice(5)}</span>
       <button class="btn danger small" data-id="${ev.id}" data-series="${ev.series||''}">종료</button>`;
     row.querySelector('button[data-id]').addEventListener('click', () => onDeleteEvent(ev.id, ev.series));
