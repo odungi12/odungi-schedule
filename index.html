@@ -63,8 +63,9 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
 .cal-dow-row { display: grid; grid-template-columns: repeat(7,1fr); }
 .cal-dow { text-align: center; font-size: 11px; color: var(--sub); padding-bottom: 4px; font-weight: 600; }
 .cal-cell {
-  min-height: 66px; border-radius: 10px; border: 1px solid var(--line); padding: 6px;
+  height: 76px; border-radius: 10px; border: 1px solid var(--line); padding: 6px;
   background: #fff; cursor: pointer; display: flex; flex-direction: column; gap: 3px;
+  overflow: hidden; min-width: 0;
 }
 .cal-cell.other-month { background: #f6f4f1; opacity: 0.55; }
 .cal-cell.today { border: 2px solid var(--accent); }
@@ -125,7 +126,7 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
 <body>
 
 <div id="signinScreen" class="signin-screen">
-  <div style="font-size:40px;">🐣</div>
+  <img src="icon-512.png" alt="오둥이" style="width:84px;height:84px;border-radius:20px;box-shadow:0 4px 14px rgba(0,0,0,0.15);">
   <h1>오둥이의 일정관리</h1>
   <p>구글 계정으로 로그인하면 내 구글 캘린더와 연동해서<br>가족생일·기념일·약속을 한눈에 관리할 수 있어요.</p>
   <div id="gsiBtn"></div>
@@ -139,8 +140,8 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
   <div class="app">
     <div class="col-left">
       <div class="card">
-        <h1>오둥이의 일정관리 🐣</h1>
-        <p class="subtitle">가족생일 · 결혼기념일 · 친구생일 · 약속 · 중요일정 · 이벤트</p>
+        <h1 style="display:flex;align-items:center;gap:8px;"><img src="icon-192.png" alt="" style="width:26px;height:26px;border-radius:7px;">오둥이의 일정관리</h1>
+        <p class="subtitle">가족생일 · 기념일 · 친구생일 · 약속 · 중요일정 · 이벤트 · 업무일정</p>
         <div class="top-actions">
           <button class="btn" id="btnAdd" style="flex:1">+ 일정 추가</button>
           <button class="btn secondary" id="btnRefresh">새로고침</button>
@@ -150,6 +151,10 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
       <div class="card">
         <h2>다가오는 일정 (D-day)</h2>
         <div class="dday-list" id="ddayList"><div class="empty">불러오는 중...</div></div>
+      </div>
+      <div class="card">
+        <h2>중요일정 · 이벤트 (D-day)</h2>
+        <div class="dday-list" id="ddayList2"><div class="empty">불러오는 중...</div></div>
       </div>
     </div>
 
@@ -189,11 +194,12 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
     </div>
     <div class="field">
       <label>반복 유형</label>
-      <div class="radio-row">
+      <div class="radio-row" id="repeatRadioRow">
         <label><input type="radio" name="fRepeat" value="none"> 반복 없음 (1회성 일정)</label>
-        <label><input type="radio" name="fRepeat" value="solar"> 양력 기준 매년 반복</label>
-        <label><input type="radio" name="fRepeat" value="lunar"> 음력 기준 매년 반복</label>
+        <label class="repeat-yearly-option"><input type="radio" name="fRepeat" value="solar"> 양력 기준 매년 반복</label>
+        <label class="repeat-yearly-option"><input type="radio" name="fRepeat" value="lunar"> 음력 기준 매년 반복</label>
       </div>
+      <div class="status-msg" id="repeatNote" style="margin-top:4px;"></div>
     </div>
     <div class="field" id="fDateWrap">
       <label>날짜</label>
@@ -284,12 +290,17 @@ function lunar2solar(y, m, d, isLeap) {
 /* ===================== 카테고리 설정 ===================== */
 const CATEGORIES = {
   '가족생일':   { color: '#c98a00', colorId: '5',  emoji: '🎂' },
-  '결혼기념일': { color: '#dc2127', colorId: '11', emoji: '💍' },
+  '기념일':     { color: '#dc2127', colorId: '11', emoji: '💍' },
   '친구생일':   { color: '#3fb8c4', colorId: '7',  emoji: '🎉' },
   '약속':       { color: '#ff9f4a', colorId: '6',  emoji: '📅' },
   '중요일정':   { color: '#9b6bd6', colorId: '3',  emoji: '⭐' },
   '이벤트':     { color: '#4caf50', colorId: '10', emoji: '🎊' },
+  '업무일정':   { color: '#5484ed', colorId: '9',  emoji: '💼' },
 };
+// 매년 반복(양력/음력) 등록이 허용되는 카테고리
+const REPEATABLE_CATEGORIES = new Set(['가족생일', '기념일', '친구생일']);
+// 예전에 "결혼기념일"로 저장된 일정을 "기념일"로 인식하기 위한 별칭
+const CATEGORY_ALIASES = { '결혼기념일': '기념일' };
 const TAG_RE = /^\[오둥이 태그\]\s*(.+)$/m;
 const LUNAR_BUFFER_YEARS = 10;
 const LUNAR_TOPUP_THRESHOLD = 4;
@@ -439,7 +450,8 @@ async function fetchAllEvents() {
       const dateRaw = (ev.start && (ev.start.date || ev.start.dateTime)) || '';
       const dateStr = dateRaw.slice(0, 10);
       const tag = parseTag(ev.description || '');
-      const category = tag && CATEGORIES[tag.category] ? tag.category : '이벤트';
+      let rawCategory = tag ? (CATEGORY_ALIASES[tag.category] || tag.category) : null;
+      const category = rawCategory && CATEGORIES[rawCategory] ? rawCategory : '이벤트';
       return {
         id: ev.id,
         title: ev.summary || '(제목 없음)',
@@ -513,11 +525,12 @@ function daysDiff(dateStr) {
   return Math.round((target - today) / 86400000);
 }
 
-function renderDday() {
-  const el = document.getElementById('ddayList');
+function renderDdayList(elId, categoryFilter) {
+  const el = document.getElementById(elId);
+  if (!el) return;
   const today = todayStr();
   const upcoming = allEvents
-    .filter(ev => activeFilters.has(ev.category) && ev.dateStr >= today)
+    .filter(ev => activeFilters.has(ev.category) && ev.dateStr >= today && (!categoryFilter || categoryFilter.has(ev.category)))
     .sort((a,b) => a.dateStr.localeCompare(b.dateStr))
     .slice(0, 30);
   if (!upcoming.length) { el.innerHTML = '<div class="empty">다가오는 일정이 없어요.</div>'; return; }
@@ -533,6 +546,13 @@ function renderDday() {
       <span class="dday-date">${ev.dateStr.slice(5)}</span>`;
     el.appendChild(row);
   });
+}
+
+function renderDday() {
+  // 메인 목록: 모든 카테고리(중요일정 포함) 그대로 표시
+  renderDdayList('ddayList', null);
+  // 별도 목록: 중요일정 · 이벤트만 따로 관리
+  renderDdayList('ddayList2', new Set(['중요일정', '이벤트']));
 }
 
 function renderCalendar() {
@@ -568,8 +588,8 @@ function renderCalendar() {
     if (cell.dateStr && cell.dateStr === selectedDateStr) div.classList.add('selected');
     const dayEvents = cell.dateStr ? (eventsByDate[cell.dateStr] || []) : [];
     div.innerHTML = `<div class="cal-daynum">${cell.day}</div><div class="cal-events">${
-      dayEvents.slice(0,3).map(ev => `<div class="cal-event-chip" style="background:${CATEGORIES[ev.category].color}">${CATEGORIES[ev.category].emoji} ${escapeHtml(ev.title)}</div>`).join('')
-    }${dayEvents.length > 3 ? `<div style="font-size:9px;color:var(--sub)">+${dayEvents.length-3}개</div>` : ''}</div>`;
+      dayEvents.slice(0,2).map(ev => `<div class="cal-event-chip" style="background:${CATEGORIES[ev.category].color}">${CATEGORIES[ev.category].emoji} ${escapeHtml(ev.title)}</div>`).join('')
+    }${dayEvents.length > 2 ? `<div style="font-size:9px;color:var(--sub)">+${dayEvents.length-2}개</div>` : ''}</div>`;
     if (cell.dateStr) {
       div.addEventListener('click', () => { selectedDateStr = cell.dateStr; renderCalendar(); renderDayPanel(); });
     }
@@ -650,13 +670,27 @@ function populateForm() {
   document.getElementById('fLunarDay').innerHTML = Array.from({length:30}, (_,i) => `<option value="${i+1}">${i+1}일</option>`).join('');
   document.getElementById('fDate').value = todayStr();
   document.querySelector('input[name=fRepeat][value=solar]').checked = true;
-  toggleRepeatFields();
+  updateRepeatAvailability();
 }
 function toggleRepeatFields() {
   const val = document.querySelector('input[name=fRepeat]:checked').value;
   document.getElementById('fDateWrap').classList.toggle('hidden', val === 'lunar');
   document.getElementById('fLunarWrap').classList.toggle('hidden', val !== 'lunar');
 }
+function updateRepeatAvailability() {
+  const category = document.getElementById('fCategory').value;
+  const allowed = REPEATABLE_CATEGORIES.has(category);
+  document.querySelectorAll('.repeat-yearly-option').forEach(el => el.classList.toggle('hidden', !allowed));
+  const note = document.getElementById('repeatNote');
+  if (!allowed) {
+    document.querySelector('input[name=fRepeat][value=none]').checked = true;
+    note.textContent = '이 카테고리는 매년 반복 없이 1회성으로만 등록돼요.';
+  } else {
+    note.textContent = '';
+  }
+  toggleRepeatFields();
+}
+document.getElementById('fCategory').addEventListener('change', updateRepeatAvailability);
 document.querySelectorAll('input[name=fRepeat]').forEach(r => r.addEventListener('change', toggleRepeatFields));
 
 document.getElementById('btnAdd').addEventListener('click', () => {
@@ -670,7 +704,8 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   const category = document.getElementById('fCategory').value;
   const title = document.getElementById('fTitle').value.trim();
   const note = document.getElementById('fNote').value.trim();
-  const repeat = document.querySelector('input[name=fRepeat]:checked').value;
+  let repeat = document.querySelector('input[name=fRepeat]:checked').value;
+  if (!REPEATABLE_CATEGORIES.has(category)) repeat = 'none';
   const status = document.getElementById('formStatus');
   const cat = CATEGORIES[category];
   if (!title) { status.textContent = '제목을 입력해주세요.'; return; }
