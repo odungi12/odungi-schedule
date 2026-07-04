@@ -302,8 +302,8 @@ const CATEGORIES = {
   '중요일정':   { color: '#9b6bd6', colorId: '3',  emoji: '⭐' },
   '이벤트':     { color: '#4caf50', colorId: '10', emoji: '🎊' },
   '업무일정':   { color: '#5484ed', colorId: '9',  emoji: '💼' },
-  '경과일':     { color: '#ff887c', colorId: '4',  emoji: '⏳' },
   '휴무':       { color: '#a4bdfc', colorId: '1',  emoji: '🏖️' },
+  '경과일':     { color: '#ff887c', colorId: '4',  emoji: '⏳' },
   '기타':       { color: '#9aa0a6', colorId: '8',  emoji: '📌' },
 };
 // 매년 반복(양력/음력) 등록이 허용되는 카테고리
@@ -573,8 +573,8 @@ function renderDday() {
   renderDdayList('ddayList', new Set(['가족생일', '기념일', '친구생일', '약속']));
   // 별도 목록: 중요일정 · 이벤트만 따로 관리
   renderDdayList('ddayList2', new Set(['중요일정', '이벤트']));
-  // 별도 목록: 업무일정 · 휴무만 따로 관리
-  renderDdayList('ddayList3', new Set(['업무일정', '휴무']));
+  // 별도 목록: 업무일정만 따로 관리 (휴무는 달력에서만 표시)
+  renderDdayList('ddayList3', new Set(['업무일정']));
 }
 
 function daysElapsed(dateStr) {
