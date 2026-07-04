@@ -120,8 +120,10 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
 #gsiBtn { display: flex; justify-content: center; }
 .topbar { display: flex; justify-content: flex-end; padding: 8px 16px 0; max-width: 1100px; margin: 0 auto; }
 @media (max-width: 700px) {
-  .app { flex-direction: column; }
+  .app { flex-direction: column; padding: 10px; }
   .col-left { width: 100%; }
+  .col-right { width: 100%; min-width: 0; }
+  .cal-cell { height: 62px; }
 }
 </style>
 </head>
@@ -158,6 +160,10 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
         <h2>중요일정 · 이벤트 (D-day)</h2>
         <div class="dday-list" id="ddayList2"><div class="empty">불러오는 중...</div></div>
       </div>
+      <div class="card">
+        <h2>각종 경과일 (D+day)</h2>
+        <div class="dday-list" id="elapsedList"><div class="empty">불러오는 중...</div></div>
+      </div>
     </div>
 
     <div class="col-right">
@@ -172,7 +178,6 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
           </div>
         </div>
         <div class="cal-months" id="calMonths"></div>
-        <div class="day-panel" id="dayPanel"></div>
       </div>
     </div>
   </div>
@@ -293,6 +298,7 @@ const CATEGORIES = {
   '중요일정':   { color: '#9b6bd6', colorId: '3',  emoji: '⭐' },
   '이벤트':     { color: '#4caf50', colorId: '10', emoji: '🎊' },
   '업무일정':   { color: '#5484ed', colorId: '9',  emoji: '💼' },
+  '경과일':     { color: '#ff887c', colorId: '4',  emoji: '⏳' },
   '기타':       { color: '#9aa0a6', colorId: '8',  emoji: '📌' },
 };
 // 매년 반복(양력/음력) 등록이 허용되는 카테고리
@@ -332,6 +338,11 @@ function buildDescription(category, lunarMeta, note) {
   let tag = `[오둥이 태그] category=${category};lunar=${lunarMeta ? 1 : 0}`;
   if (lunarMeta) tag += `;lm=${lunarMeta.lm};ld=${lunarMeta.ld};leap=${lunarMeta.leap?1:0};series=${lunarMeta.series}`;
   return note ? (tag + '\n\n' + note) : tag;
+}
+function extractNote(desc) {
+  if (!desc) return '';
+  if (TAG_RE.test(desc)) return desc.replace(TAG_RE, '').trim();
+  return desc.trim();
 }
 function escapeHtml(s) {
   const d = document.createElement('div');
@@ -461,6 +472,7 @@ async function fetchAllEvents() {
         ld: tag ? Number(tag.ld) : null,
         leap: tag ? tag.leap === '1' : false,
         series: tag ? tag.series : null,
+        note: extractNote(ev.description || ''),
       };
     })
     .filter(ev => !!ev.dateStr);
@@ -512,7 +524,7 @@ function renderLegend() {
     label.innerHTML = `<input type="checkbox" checked data-cat="${cat}" style="width:auto;"> <span class="dot" style="background:${c.color}"></span> ${c.emoji} ${cat}`;
     label.querySelector('input').addEventListener('change', (e) => {
       if (e.target.checked) activeFilters.add(cat); else activeFilters.delete(cat);
-      renderCalendar(); renderDday(); renderDayPanel();
+      renderCalendar(); renderDday(); renderElapsedList();
     });
     el.appendChild(label);
   });
@@ -543,7 +555,7 @@ function renderDdayList(elId, categoryFilter) {
     row.className = 'dday-item';
     row.innerHTML = `
       <span class="dday-badge" style="background:${cat.color}">${diff === 0 ? 'D-DAY' : 'D-' + diff}</span>
-      <span class="dday-title">${cat.emoji} ${escapeHtml(ev.title)}</span>
+      <span class="dday-title">${cat.emoji} ${escapeHtml(ev.title)}${ev.note ? ` <span style="font-size:0.5em;color:var(--sub);">${escapeHtml(ev.note)}</span>` : ''}</span>
       <span class="dday-date">${ev.dateStr.slice(5)}</span>
       <button class="btn danger small" data-id="${ev.id}" data-series="${ev.series||''}">종료</button>`;
     row.querySelector('button[data-id]').addEventListener('click', () => onDeleteEvent(ev.id, ev.series));
@@ -556,6 +568,36 @@ function renderDday() {
   renderDdayList('ddayList', null);
   // 별도 목록: 중요일정 · 이벤트만 따로 관리
   renderDdayList('ddayList2', new Set(['중요일정', '이벤트']));
+}
+
+function daysElapsed(dateStr) {
+  const today = new Date(todayStr() + 'T00:00:00Z');
+  const target = new Date(dateStr + 'T00:00:00Z');
+  return Math.round((today - target) / 86400000);
+}
+
+function renderElapsedList() {
+  const el = document.getElementById('elapsedList');
+  if (!el) return;
+  const today = todayStr();
+  const items = allEvents
+    .filter(ev => ev.category === '경과일' && activeFilters.has(ev.category) && ev.dateStr <= today)
+    .sort((a,b) => daysElapsed(a.dateStr) - daysElapsed(b.dateStr));
+  if (!items.length) { el.innerHTML = '<div class="empty">등록된 경과일이 없어요.</div>'; return; }
+  el.innerHTML = '';
+  items.forEach(ev => {
+    const diff = daysElapsed(ev.dateStr);
+    const cat = CATEGORIES[ev.category];
+    const row = document.createElement('div');
+    row.className = 'dday-item';
+    row.innerHTML = `
+      <span class="dday-badge" style="background:${cat.color}">D+${diff}</span>
+      <span class="dday-title">${cat.emoji} ${escapeHtml(ev.title)}${ev.note ? ` <span style="font-size:0.5em;color:var(--sub);">${escapeHtml(ev.note)}</span>` : ''}</span>
+      <span class="dday-date">${ev.dateStr.slice(5)}</span>
+      <button class="btn danger small" data-id="${ev.id}" data-series="${ev.series||''}">종료</button>`;
+    row.querySelector('button[data-id]').addEventListener('click', () => onDeleteEvent(ev.id, ev.series));
+    el.appendChild(row);
+  });
 }
 
 function buildMonthCells(year, month) {
@@ -574,6 +616,33 @@ function buildMonthCells(year, month) {
     cells.push({ day: idx + 1, other: true, dateStr: null });
   }
   return cells;
+}
+
+function buildDayPanelHtml(dateStr) {
+  const dayEvents = allEvents.filter(ev => ev.dateStr === dateStr && activeFilters.has(ev.category));
+  let html = `<div class="day-panel-title">${dateStr}</div>`;
+  if (!dayEvents.length) {
+    html += '<div class="empty">이 날짜에 일정이 없어요.</div>';
+  } else {
+    dayEvents.forEach(ev => {
+      const cat = CATEGORIES[ev.category];
+      html += `<div class="day-event-row">
+        <span class="dot" style="background:${cat.color}"></span>
+        <div class="info">
+          <div class="title">${escapeHtml(ev.title)}</div>
+          <div class="cat-tag">${cat.emoji} ${ev.category}${ev.isLunar ? ' · 음력 자동변환' : ''}</div>
+          ${ev.note ? `<div class="cat-tag">${escapeHtml(ev.note)}</div>` : ''}
+        </div>
+        <button class="btn danger small" data-id="${ev.id}" data-series="${ev.series||''}">종료</button>
+      </div>`;
+    });
+  }
+  return html;
+}
+function wireDayPanelButtons(panelEl) {
+  panelEl.querySelectorAll('button[data-id]').forEach(btn => {
+    btn.addEventListener('click', () => onDeleteEvent(btn.dataset.id, btn.dataset.series));
+  });
 }
 
 function renderMonthBlock(year, month, eventsByDate, today) {
@@ -604,11 +673,21 @@ function renderMonthBlock(year, month, eventsByDate, today) {
       dayEvents.slice(0,2).map(ev => `<div class="cal-event-chip" style="background:${CATEGORIES[ev.category].color}">${CATEGORIES[ev.category].emoji} ${escapeHtml(ev.title)}</div>`).join('')
     }${dayEvents.length > 2 ? `<div style="font-size:9px;color:var(--sub)">+${dayEvents.length-2}개</div>` : ''}</div>`;
     if (cell.dateStr) {
-      div.addEventListener('click', () => { selectedDateStr = cell.dateStr; renderCalendar(); renderDayPanel(); });
+      div.addEventListener('click', () => { selectedDateStr = cell.dateStr; renderCalendar(); });
     }
     grid.appendChild(div);
   });
   wrap.appendChild(grid);
+
+  const dayPanel = document.createElement('div');
+  dayPanel.className = 'day-panel';
+  const monthPrefix = `${year}-${String(month+1).padStart(2,'0')}`;
+  if (selectedDateStr && selectedDateStr.startsWith(monthPrefix)) {
+    dayPanel.innerHTML = buildDayPanelHtml(selectedDateStr);
+    wireDayPanelButtons(dayPanel);
+  }
+  wrap.appendChild(dayPanel);
+
   return wrap;
 }
 
@@ -630,32 +709,6 @@ function renderCalendar() {
     if (m > 11) { m -= 12; y += 1; }
     container.appendChild(renderMonthBlock(y, m, eventsByDate, today));
   }
-}
-
-function renderDayPanel() {
-  const panel = document.getElementById('dayPanel');
-  if (!selectedDateStr) { panel.innerHTML = ''; return; }
-  const dayEvents = allEvents.filter(ev => ev.dateStr === selectedDateStr && activeFilters.has(ev.category));
-  let html = `<div class="day-panel-title">${selectedDateStr}</div>`;
-  if (!dayEvents.length) {
-    html += '<div class="empty">이 날짜에 일정이 없어요.</div>';
-  } else {
-    dayEvents.forEach(ev => {
-      const cat = CATEGORIES[ev.category];
-      html += `<div class="day-event-row">
-        <span class="dot" style="background:${cat.color}"></span>
-        <div class="info">
-          <div class="title">${escapeHtml(ev.title)}</div>
-          <div class="cat-tag">${cat.emoji} ${ev.category}${ev.isLunar ? ' · 음력 자동변환' : ''}</div>
-        </div>
-        <button class="btn danger small" data-id="${ev.id}" data-series="${ev.series||''}">종료</button>
-      </div>`;
-    });
-  }
-  panel.innerHTML = html;
-  panel.querySelectorAll('button[data-id]').forEach(btn => {
-    btn.addEventListener('click', () => onDeleteEvent(btn.dataset.id, btn.dataset.series));
-  });
 }
 
 async function onDeleteEvent(eventId, seriesId) {
@@ -684,7 +737,7 @@ async function refreshAll() {
     console.error(e);
     alert(e.message);
   }
-  renderDday(); renderCalendar(); renderDayPanel();
+  renderDday(); renderElapsedList(); renderCalendar();
   showLoading(false);
 }
 
@@ -693,7 +746,7 @@ document.getElementById('btnPrev').addEventListener('click', () => { viewMonth--
 document.getElementById('btnNext').addEventListener('click', () => { viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; } renderCalendar(); });
 document.getElementById('btnToday').addEventListener('click', () => {
   const now = new Date(); viewYear = now.getFullYear(); viewMonth = now.getMonth(); selectedDateStr = todayStr();
-  renderCalendar(); renderDayPanel();
+  renderCalendar();
 });
 document.getElementById('btnRefresh').addEventListener('click', refreshAll);
 
