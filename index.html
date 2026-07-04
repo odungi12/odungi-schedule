@@ -528,8 +528,10 @@ function renderDdayList(elId, categoryFilter) {
   const el = document.getElementById(elId);
   if (!el) return;
   const today = todayStr();
+  // 오늘로부터 1년 이내의 일정만 표시
+  const oneYearLater = ymd(new Date(new Date(today + 'T00:00:00Z').getTime() + 365 * 86400000));
   const upcoming = allEvents
-    .filter(ev => activeFilters.has(ev.category) && ev.dateStr >= today && (!categoryFilter || categoryFilter.has(ev.category)))
+    .filter(ev => activeFilters.has(ev.category) && ev.dateStr >= today && ev.dateStr <= oneYearLater && (!categoryFilter || categoryFilter.has(ev.category)))
     .sort((a,b) => a.dateStr.localeCompare(b.dateStr))
     .slice(0, 30);
   if (!upcoming.length) { el.innerHTML = '<div class="empty">다가오는 일정이 없어요.</div>'; return; }
