@@ -57,8 +57,10 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
 .dday-title { font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dday-date { font-size: 11px; color: var(--sub); white-space: nowrap; }
 .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.cal-title { font-size: 16px; font-weight: 700; }
+.cal-title { font-size: 16px; font-weight: 700; text-align: center; margin-bottom: 8px; }
 .cal-nav { display: flex; gap: 6px; }
+.cal-months { display: flex; gap: 18px; flex-wrap: wrap; }
+.cal-month-block { flex: 1; min-width: 260px; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .cal-dow-row { display: grid; grid-template-columns: repeat(7,1fr); }
 .cal-dow { text-align: center; font-size: 11px; color: var(--sub); padding-bottom: 4px; font-weight: 600; }
@@ -120,6 +122,8 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
 @media (max-width: 700px) {
   .app { flex-direction: column; }
   .col-left { width: 100%; }
+  .cal-months { flex-direction: column; }
+  .cal-month-block { min-width: 0; }
 }
 </style>
 </head>
@@ -140,8 +144,8 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
   <div class="app">
     <div class="col-left">
       <div class="card">
-        <h1 style="display:flex;align-items:center;gap:8px;"><img src="icon-192.png" alt="" style="width:26px;height:26px;border-radius:7px;">오둥이의 일정관리</h1>
-        <p class="subtitle">가족생일 · 기념일 · 친구생일 · 약속 · 중요일정 · 이벤트 · 업무일정</p>
+        <h1 style="display:flex;align-items:center;gap:12px;margin-bottom:10px;"><img src="icon-192.png" alt="" style="width:78px;height:78px;border-radius:20px;box-shadow:0 3px 10px rgba(0,0,0,0.12);flex-shrink:0;">오둥이 일정</h1>
+        <p class="subtitle">사랑하는 오둥이의 소중한 일정표</p>
         <div class="top-actions">
           <button class="btn" id="btnAdd" style="flex:1">+ 일정 추가</button>
           <button class="btn secondary" id="btnRefresh">새로고침</button>
@@ -153,7 +157,10 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
         <div class="dday-list" id="ddayList"><div class="empty">불러오는 중...</div></div>
       </div>
       <div class="card">
-        <h2>중요일정 · 이벤트 (D-day)</h2>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <h2 style="margin:0;">중요일정 · 이벤트 (D-day)</h2>
+          <button class="btn small" id="btnAddImportant">+ 추가</button>
+        </div>
         <div class="dday-list" id="ddayList2"><div class="empty">불러오는 중...</div></div>
       </div>
     </div>
@@ -162,19 +169,14 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
       <div class="card">
         <div class="cal-header">
           <div class="cal-nav">
-            <button class="btn secondary small" id="btnPrev">‹</button>
+            <button class="btn secondary small" id="btnPrev">‹ 이전달</button>
             <button class="btn secondary small" id="btnToday">오늘</button>
           </div>
-          <div class="cal-title" id="calTitle"></div>
           <div class="cal-nav">
-            <button class="btn secondary small" id="btnNext">›</button>
+            <button class="btn secondary small" id="btnNext">다음달 ›</button>
           </div>
         </div>
-        <div class="cal-dow-row">
-          <div class="cal-dow">일</div><div class="cal-dow">월</div><div class="cal-dow">화</div>
-          <div class="cal-dow">수</div><div class="cal-dow">목</div><div class="cal-dow">금</div><div class="cal-dow">토</div>
-        </div>
-        <div class="cal-grid" id="calGrid"></div>
+        <div class="cal-months" id="calMonths"></div>
         <div class="day-panel" id="dayPanel"></div>
       </div>
     </div>
@@ -543,7 +545,9 @@ function renderDdayList(elId, categoryFilter) {
     row.innerHTML = `
       <span class="dday-badge" style="background:${cat.color}">${diff === 0 ? 'D-DAY' : 'D-' + diff}</span>
       <span class="dday-title">${cat.emoji} ${escapeHtml(ev.title)}</span>
-      <span class="dday-date">${ev.dateStr.slice(5)}</span>`;
+      <span class="dday-date">${ev.dateStr.slice(5)}</span>
+      <button class="btn danger small" data-id="${ev.id}" data-series="${ev.series||''}">삭제</button>`;
+    row.querySelector('button[data-id]').addEventListener('click', () => onDeleteEvent(ev.id, ev.series));
     el.appendChild(row);
   });
 }
@@ -555,31 +559,41 @@ function renderDday() {
   renderDdayList('ddayList2', new Set(['중요일정', '이벤트']));
 }
 
-function renderCalendar() {
-  document.getElementById('calTitle').textContent = `${viewYear}년 ${viewMonth+1}월`;
-  const grid = document.getElementById('calGrid');
-  grid.innerHTML = '';
-  const firstDay = new Date(Date.UTC(viewYear, viewMonth, 1));
+function buildMonthCells(year, month) {
+  const firstDay = new Date(Date.UTC(year, month, 1));
   const startDow = firstDay.getUTCDay();
-  const daysInMonth = new Date(Date.UTC(viewYear, viewMonth+1, 0)).getUTCDate();
-  const daysInPrevMonth = new Date(Date.UTC(viewYear, viewMonth, 0)).getUTCDate();
-  const today = todayStr();
+  const daysInMonth = new Date(Date.UTC(year, month+1, 0)).getUTCDate();
+  const daysInPrevMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
 
   const cells = [];
   for (let i = startDow - 1; i >= 0; i--) cells.push({ day: daysInPrevMonth - i, other: true, dateStr: null });
   for (let d = 1; d <= daysInMonth; d++) {
-    cells.push({ day: d, other: false, dateStr: `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}` });
+    cells.push({ day: d, other: false, dateStr: `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}` });
   }
   while (cells.length % 7 !== 0 || cells.length < 35) {
     const idx = cells.length - (startDow + daysInMonth);
     cells.push({ day: idx + 1, other: true, dateStr: null });
   }
+  return cells;
+}
 
-  const eventsByDate = {};
-  allEvents.forEach(ev => {
-    if (!activeFilters.has(ev.category)) return;
-    (eventsByDate[ev.dateStr] = eventsByDate[ev.dateStr] || []).push(ev);
-  });
+function renderMonthBlock(year, month, eventsByDate, today) {
+  const wrap = document.createElement('div');
+  wrap.className = 'cal-month-block';
+
+  const title = document.createElement('div');
+  title.className = 'cal-title';
+  title.textContent = `${year}년 ${month+1}월`;
+  wrap.appendChild(title);
+
+  const dow = document.createElement('div');
+  dow.className = 'cal-dow-row';
+  dow.innerHTML = ['일','월','화','수','목','금','토'].map(d => `<div class="cal-dow">${d}</div>`).join('');
+  wrap.appendChild(dow);
+
+  const grid = document.createElement('div');
+  grid.className = 'cal-grid';
+  const cells = buildMonthCells(year, month);
 
   cells.forEach(cell => {
     const div = document.createElement('div');
@@ -595,6 +609,28 @@ function renderCalendar() {
     }
     grid.appendChild(div);
   });
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+function renderCalendar() {
+  const container = document.getElementById('calMonths');
+  container.innerHTML = '';
+  const today = todayStr();
+
+  const eventsByDate = {};
+  allEvents.forEach(ev => {
+    if (!activeFilters.has(ev.category)) return;
+    (eventsByDate[ev.dateStr] = eventsByDate[ev.dateStr] || []).push(ev);
+  });
+
+  // 이번 달 + 다음 달, 총 2개월치를 함께 보여준다 (시간이 지나 다음달이 되면 자동으로 한 칸씩 밀림)
+  for (let offset = 0; offset < 2; offset++) {
+    let m = viewMonth + offset;
+    let y = viewYear;
+    if (m > 11) { m -= 12; y += 1; }
+    container.appendChild(renderMonthBlock(y, m, eventsByDate, today));
+  }
 }
 
 function renderDayPanel() {
@@ -663,9 +699,10 @@ document.getElementById('btnToday').addEventListener('click', () => {
 document.getElementById('btnRefresh').addEventListener('click', refreshAll);
 
 /* ===================== 추가 폼 ===================== */
-function populateForm() {
+function populateForm(allowedCategories) {
+  const cats = (allowedCategories && allowedCategories.length) ? allowedCategories : Object.keys(CATEGORIES);
   const catSel = document.getElementById('fCategory');
-  catSel.innerHTML = Object.keys(CATEGORIES).map(c => `<option value="${c}">${CATEGORIES[c].emoji} ${c}</option>`).join('');
+  catSel.innerHTML = cats.map(c => `<option value="${c}">${CATEGORIES[c].emoji} ${c}</option>`).join('');
   document.getElementById('fLunarMonth').innerHTML = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
   document.getElementById('fLunarDay').innerHTML = Array.from({length:30}, (_,i) => `<option value="${i+1}">${i+1}일</option>`).join('');
   document.getElementById('fDate').value = todayStr();
@@ -695,6 +732,11 @@ document.querySelectorAll('input[name=fRepeat]').forEach(r => r.addEventListener
 
 document.getElementById('btnAdd').addEventListener('click', () => {
   populateForm();
+  document.getElementById('formStatus').textContent = '';
+  document.getElementById('modalBackdrop').classList.add('open');
+});
+document.getElementById('btnAddImportant').addEventListener('click', () => {
+  populateForm(['중요일정', '이벤트']);
   document.getElementById('formStatus').textContent = '';
   document.getElementById('modalBackdrop').classList.add('open');
 });
