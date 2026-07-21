@@ -141,8 +141,17 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
   <img src="icon-512.png" alt="오둥이" style="width:84px;height:84px;border-radius:20px;box-shadow:0 4px 14px rgba(0,0,0,0.15);">
   <h1>오둥이의 일정관리</h1>
   <p>구글 계정으로 로그인하면 내 구글 캘린더와 연동해서<br>가족생일·기념일·약속을 한눈에 관리할 수 있어요.</p>
+  <p style="color:var(--sub);font-size:12px;max-width:320px;">
+    이 앱은 로그인한 본인의 Google 캘린더에서 일정을 읽고, 새 일정을 추가/삭제하는 용도로만 캘린더 접근 권한을 사용합니다.
+    다른 목적으로 데이터를 저장하거나 제3자와 공유하지 않습니다.
+  </p>
   <div id="gsiBtn"></div>
   <div id="signinStatus" class="status-msg"></div>
+  <div style="margin-top:6px;font-size:11.5px;">
+    <a href="privacy.html" target="_blank" style="color:var(--sub);text-decoration:underline;">개인정보처리방침</a>
+    <span style="color:var(--line);">· </span>
+    <a href="mailto:tlsdudqjasla12@gmail.com" style="color:var(--sub);text-decoration:underline;">문의하기</a>
+  </div>
 </div>
 
 <div id="mainScreen" class="hidden">
@@ -252,6 +261,8 @@ h2 { font-size: 14px; margin: 0 0 10px 0; color: var(--ink); }
 ===================================================================== */
 const CLIENT_ID = '77817571471-gu60u0c02lbal6u3kine04kgkseq4h8u.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events';
+// 개인 전용 앱이라 로그인 계정을 미리 지정해두면, 매번 뜨는 "계정을 선택하세요" 화면을 건너뜁니다.
+const USER_HINT = 'tlsdudqjasla12@gmail.com';
 
 /* ===================== 음력 변환 (1900-2100) ===================== */
 const lunarInfo = [0x04bd8,0x04ae0,0x0a570,0x054d5,0x0d260,0x0d950,0x16554,0x056a0,0x09ad0,0x055d2,
@@ -365,20 +376,30 @@ function escapeHtml(s) {
 }
 
 /* ===================== 구글 로그인 (GIS) ===================== */
+const AUTH_GRANTED_KEY = 'odungi_has_granted';
+
 function initAuth() {
   if (!window.google || !google.accounts) { setTimeout(initAuth, 200); return; }
+  const alreadyGranted = localStorage.getItem(AUTH_GRANTED_KEY) === '1';
+
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
+    hint: USER_HINT || undefined,
     callback: (resp) => {
       if (resp.error) {
-        document.getElementById('signinStatus').textContent = '로그인 실패: ' + resp.error;
+        // 조용히(자동) 시도한 로그인이 실패한 경우엔 에러 문구 없이 로그인 화면만 보여줌
+        if (resp.error !== 'interaction_required' && resp.error !== 'access_denied') {
+          document.getElementById('signinStatus').textContent = '로그인 실패: ' + resp.error;
+        }
+        document.getElementById('signinScreen').classList.remove('hidden');
         return;
       }
       accessToken = resp.access_token;
       const expiresAt = Date.now() + (resp.expires_in * 1000);
-      sessionStorage.setItem('odungi_token', accessToken);
-      sessionStorage.setItem('odungi_token_exp', String(expiresAt));
+      localStorage.setItem('odungi_token', accessToken);
+      localStorage.setItem('odungi_token_exp', String(expiresAt));
+      localStorage.setItem(AUTH_GRANTED_KEY, '1');
       showMainScreen();
     },
   });
@@ -388,15 +409,22 @@ function initAuth() {
   const btn = document.createElement('button');
   btn.className = 'btn';
   btn.textContent = 'Google 계정으로 로그인';
-  btn.addEventListener('click', () => tokenClient.requestAccessToken({ prompt: 'consent' }));
+  btn.addEventListener('click', () => tokenClient.requestAccessToken({ prompt: 'consent', hint: USER_HINT || undefined }));
   btnWrap.appendChild(btn);
 
-  // 세션 내 저장된 토큰이 유효하면 자동 로그인
-  const saved = sessionStorage.getItem('odungi_token');
-  const savedExp = Number(sessionStorage.getItem('odungi_token_exp') || 0);
+  // 저장된 토큰이 아직 유효하면 화면 전환 없이 바로 사용
+  const saved = localStorage.getItem('odungi_token');
+  const savedExp = Number(localStorage.getItem('odungi_token_exp') || 0);
   if (saved && savedExp > Date.now() + 60000) {
     accessToken = saved;
     showMainScreen();
+    return;
+  }
+
+  // 이전에 한 번이라도 로그인(동의)한 적이 있다면, 로그인 화면을 띄우지 않고
+  // 백그라운드에서 조용히 새 토큰 발급을 시도한다 (클릭 없는 자동 로그인).
+  if (alreadyGranted) {
+    tokenClient.requestAccessToken({ prompt: '', hint: USER_HINT || undefined });
   }
 }
 
@@ -404,8 +432,9 @@ document.getElementById('btnSignOut').addEventListener('click', () => {
   if (accessToken && window.google) {
     google.accounts.oauth2.revoke(accessToken, () => {});
   }
-  sessionStorage.removeItem('odungi_token');
-  sessionStorage.removeItem('odungi_token_exp');
+  localStorage.removeItem('odungi_token');
+  localStorage.removeItem('odungi_token_exp');
+  localStorage.removeItem(AUTH_GRANTED_KEY);
   accessToken = null;
   document.getElementById('mainScreen').classList.add('hidden');
   document.getElementById('signinScreen').classList.remove('hidden');
@@ -431,8 +460,9 @@ async function apiFetch(path, opts) {
   if (opts.body) headers['Content-Type'] = 'application/json';
   const res = await fetch(API_BASE + path, Object.assign({}, opts, { headers }));
   if (res.status === 401) {
-    sessionStorage.removeItem('odungi_token');
-    throw new Error('로그인이 만료됐어요. 새로고침 후 다시 로그인해주세요.');
+    localStorage.removeItem('odungi_token');
+    localStorage.removeItem('odungi_token_exp');
+    throw new Error('로그인이 만료됐어요. 새로고침하면 자동으로 다시 로그인됩니다.');
   }
   if (!res.ok) {
     let msg = res.status;
